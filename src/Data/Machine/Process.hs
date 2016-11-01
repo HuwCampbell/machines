@@ -55,7 +55,6 @@ module Data.Machine.Process
   , strippingPrefix
   ) where
 
-import Control.Applicative
 import Control.Category
 import Control.Monad (liftM)
 import Data.Foldable hiding (fold)
@@ -536,7 +535,7 @@ autoM :: (Category k, Monad m) => (a -> m b) -> MachineT m (k a) b
 autoM f =
     loop
   where
-    loop = encased (Await (\t -> MachineT (flip Yield loop <$> f t)) id stopped)
+    loop = encased (Await (\t -> MachineT (flip Yield loop `liftM` f t)) id stopped)
 
 -- |
 -- Skip all but the final element of the input
