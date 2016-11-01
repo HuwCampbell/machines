@@ -389,13 +389,9 @@ scan func seed =
 -- |
 -- 'scan1' is a variant of 'scan' that has no starting value argument
 --
--- It may be useful to consider this alternative signature
--- @
--- scan1 :: Category k => (a -> a -> a) -> Machine (k a) a
--- @
---
 -- This can be constructed from a plan with
 -- @
+-- scan1 :: Category k => (a -> a -> a) -> Machine (k a) a
 -- scan1 func = construct $ await >>= go where
 --   go cur = do
 --     yield cur
