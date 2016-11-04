@@ -509,9 +509,14 @@ fold1 func =
   in  encased $ Await step id stopped
 {-# INLINABLE fold1 #-}
 
-
 -- | Break each input into pieces that are fed downstream
 -- individually.
+--
+-- This can be constructed from a plan with
+-- @
+-- asParts :: Foldable f => Process (f a) a
+-- asParts = repeatedly $ await >>= traverse_ yield
+-- @
 --
 -- Examples:
 --
@@ -520,7 +525,13 @@ fold1 func =
 -- [1,2,3,4,5,6]
 --
 asParts :: Foldable f => Process (f a) a
-asParts = repeatedly $ await >>= traverse_ yield
+asParts =
+  let step = encased
+           $ Await (foldr (\b s -> encased (Yield b s)) step)
+                   id
+                   stopped
+  in  step
+{-# INLINABLE asParts #-}
 
 -- | @sinkPart_ toParts sink@ creates a process that uses the
 -- @toParts@ function to break input into a tuple of @(passAlong,
