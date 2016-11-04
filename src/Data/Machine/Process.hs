@@ -27,36 +27,51 @@ module Data.Machine.Process
   -- ** Common Processes
   , (<~), (~>)
   , echo
+  , echo'
   , supply
   , prepended
   , filtered
+  , filtered'
   , dropping
+  , dropping'
   , taking
+  , taking'
   , droppingWhile
+  , droppingWhile'
   , takingWhile
+  , takingWhile'
   , buffered
+  , buffered'
   , fold
+  , fold'
   , fold1
   , scan
+  , scan'
   , scan1
   , scanMap
   , asParts
+  , asParts'
   , sinkPart_
   , autoM
+  , autoM'
   , final
+  , final'
   , finalOr
   , intersperse
   , largest
   , smallest
   , sequencing
   , mapping
+  , mapping'
   , reading
   , showing
   , strippingPrefix
   ) where
 
+import Control.Applicative
 import Control.Category
-import Control.Monad (liftM)
+import Control.Monad (liftM, replicateM_, when)
+import Control.Monad.Trans (lift)
 import Data.Foldable hiding (fold)
 import Data.Machine.Is
 import Data.Machine.Plan
@@ -119,6 +134,12 @@ echo =
     loop = encased (Await (\t -> encased (Yield t loop)) Refl stopped)
 {-# INLINABLE echo #-}
 
+echo' :: Process a a
+echo' = repeatedly $ do
+  i <- await
+  yield i
+{-# INLINABLE echo' #-}
+
 -- | A 'Process' that prepends the elements of a 'Foldable' onto its input, then repeats its input from there.
 prepended :: Foldable f => f a -> Process a a
 prepended = before echo . traverse_ yield
@@ -151,6 +172,12 @@ filtered p =
            stopped
 {-# INLINABLE filtered #-}
 
+filtered' :: (a -> Bool) -> Process a a
+filtered' p = repeatedly $ do
+  i <- await
+  when (p i) $ yield i
+{-# INLINABLE filtered' #-}
+
 -- | A 'Process' that drops the first @n@, then repeats the rest.
 --
 -- This can be constructed from a plan with
@@ -175,6 +202,10 @@ dropping cnt0 =
       = encased (Await (\_ -> loop (cnt - 1)) Refl stopped)
 {-# INLINABLE dropping #-}
 
+dropping' :: Int -> Process a a
+dropping' n = before echo $ replicateM_ n await
+{-# INLINABLE dropping' #-}
+
 -- | A 'Process' that passes through the first @n@ elements from its input then stops
 --
 -- This can be constructed from a plan with
@@ -198,6 +229,10 @@ taking cnt0 =
       | otherwise
       = encased (Await (\v -> encased $ Yield v (loop (cnt - 1))) Refl stopped)
 {-# INLINABLE taking #-}
+
+taking' :: Int -> Process a a
+taking' n = construct . replicateM_ n $ await >>= yield
+{-# INLINABLE taking' #-}
 
 -- | A 'Process' that passes through elements until a predicate ceases to hold, then stops
 --
@@ -225,6 +260,10 @@ takingWhile p =
            stopped
 {-# INLINABLE takingWhile #-}
 
+takingWhile' :: (a -> Bool) -> Process a a
+takingWhile' p = repeatedly $ await >>= \v -> if p v then yield v else stop
+{-# INLINABLE takingWhile' #-}
+
 -- | A 'Process' that drops elements while a predicate holds
 --
 -- This can be constructed from a plan with
@@ -251,6 +290,12 @@ droppingWhile p =
            Refl
            stopped
 {-# INLINABLE droppingWhile #-}
+
+
+droppingWhile' :: (a -> Bool) -> Process a a
+droppingWhile' p = before echo loop where
+  loop = await >>= \v -> if p v then loop else yield v
+{-# INLINABLE droppingWhile' #-}
 
 -- | Chunk up the input into `n` element lists.
 --
@@ -307,6 +352,14 @@ buffered n =
     finish dl = encased
               $ Yield (dl []) stopped
 {-# INLINABLE buffered #-}
+
+buffered' :: Int -> Process a [a]
+buffered' = repeatedly . go [] where
+  go acc 0 = yield (reverse acc)
+  go acc n = do
+    i <- await <|> yield (reverse acc) *> stop
+    go (i:acc) $! n-1
+{-# INLINABLE buffered' #-}
 
 -- | Build a new 'Machine' by adding a 'Process' to the output of an old 'Machine'
 --
@@ -404,6 +457,14 @@ scan func seed =
   in  step seed
 {-# INLINABLE scan #-}
 
+scan' :: Category k => (a -> b -> a) -> a -> Machine (k b) a
+scan' func seed = construct $ go seed where
+  go cur = do
+    yield cur
+    next <- await
+    go $! func cur next
+{-# INLINABLE scan' #-}
+
 -- |
 -- 'scan1' is a variant of 'scan' that has no starting value argument
 --
@@ -482,6 +543,13 @@ fold func =
   in  step
 {-# INLINABLE fold #-}
 
+fold' :: Category k => (a -> b -> a) -> a -> Machine (k b) a
+fold' func seed = construct $ go seed where
+  go cur = do
+    next <- await <|> yield cur *> stop
+    go $! func cur next
+{-# INLINABLE fold' #-}
+
 -- |
 -- 'fold1' is a variant of 'fold' that has no starting value argument
 --
@@ -533,6 +601,10 @@ asParts =
   in  step
 {-# INLINABLE asParts #-}
 
+asParts' :: Foldable f => Process (f a) a
+asParts' = repeatedly $ await >>= traverse_ yield
+{-# INLINABLE asParts' #-}
+
 -- | @sinkPart_ toParts sink@ creates a process that uses the
 -- @toParts@ function to break input into a tuple of @(passAlong,
 -- sinkPart)@ for which the second projection is given to the supplied
@@ -574,6 +646,11 @@ autoM f =
     loop = encased (Await (\t -> MachineT (flip Yield loop `liftM` f t)) id stopped)
 {-# INLINABLE autoM #-}
 
+
+autoM' :: (Category k, Monad m) => (a -> m b) -> MachineT m (k a) b
+autoM' f = repeatedly $ await >>= lift . f >>= yield
+{-# INLINABLE autoM' #-}
+
 -- |
 -- Skip all but the final element of the input
 --
@@ -601,6 +678,14 @@ final =
       emit x = encased (Yield x stopped)
   in encased $ Await step id stopped
 {-# INLINABLE final #-}
+
+final' :: Category k => Machine (k a) a
+final' = construct $ await >>= go where
+  go prev = do
+    next <- await <|> yield prev *> stop
+    go next
+{-# INLINABLE final' #-}
+
 
 -- |
 -- Skip all but the final element of the input.
@@ -704,6 +789,10 @@ mapping f =
   where
     loop = encased (Await (\t -> encased (Yield (f t) loop)) id stopped)
 {-# INLINABLE mapping #-}
+
+mapping' :: Category k => (a -> b) -> Machine (k a) b
+mapping' f = repeatedly $ await >>= yield . f
+{-# INLINABLE mapping' #-}
 
 -- |
 -- Parse 'Read'able values, only emitting the value if the parse succeeds.

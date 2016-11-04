@@ -1,5 +1,6 @@
 module Main (main) where
 
+import Control.Applicative
 import Control.Monad (void)
 import Control.Monad.Identity
 import Criterion.Main
@@ -34,46 +35,55 @@ main =
   defaultMain
   [ bgroup "map"
       [ bench "machines" $ whnf drainM (M.mapping (+1))
+      , bench "machines'" $ whnf drainM (M.mapping' (+1))
       , bench "pipes" $ whnf drainP (P.map (+1))
       , bench "conduit" $ whnf drainC (C.map (+1))
       ]
   , bgroup "drop"
       [ bench "machines" $ whnf drainM (M.dropping value)
+      , bench "machines'" $ whnf drainM (M.dropping' value)
       , bench "pipes" $ whnf drainP (P.drop value)
       , bench "conduit" $ whnf drainC (C.drop value)
       ]
   , bgroup "dropWhile"
       [ bench "machines" $ whnf drainM (M.droppingWhile (<= value))
+      , bench "machines'" $ whnf drainM (M.droppingWhile' (<= value))
       , bench "pipes" $ whnf drainP (P.dropWhile (<= value))
       , bench "conduit" $ whnf drainC (CC.dropWhile (<= value))
       ]
   , bgroup "scan"
       [ bench "machines" $ whnf drainM (M.scan (+) 0)
+      , bench "machines'" $ whnf drainM (M.scan' (+) 0)
       , bench "pipes" $ whnf drainP (P.scan (+) 0 id)
       , bench "conduit" $ whnf drainC (CC.scanl (+) 0)
       ]
   , bgroup "take"
       [ bench "machines" $ whnf drainM (M.taking value)
+      , bench "machines'" $ whnf drainM (M.taking' value)
       , bench "pipes" $ whnf drainP (P.take value)
       , bench "conduit" $ whnf drainC (C.isolate value)
       ]
   , bgroup "takeWhile"
       [ bench "machines" $ whnf drainM (M.takingWhile (<= value))
+      , bench "machines'" $ whnf drainM (M.takingWhile' (<= value))
       , bench "pipes" $ whnf drainP (P.takeWhile (<= value))
       , bench "conduit" $ whnf drainC (CC.takeWhile (<= value))
       ]
   , bgroup "fold"
       [ bench "machines" $ whnf drainM (M.fold (+) 0)
+      , bench "machines'" $ whnf drainM (M.fold' (+) 0)
       , bench "pipes" $ whnf (P.fold (+) 0 id) sourceP
       , bench "conduit" $ whnf drainSC (C.fold (+) 0)
       ]
   , bgroup "filter"
       [ bench "machines" $ whnf drainM (M.filtered even)
+      , bench "machines'" $ whnf drainM (M.filtered' even)
       , bench "pipes" $ whnf drainP (P.filter even)
       , bench "conduit" $ whnf drainC (C.filter even)
       ]
   , bgroup "mapM"
       [ bench "machines" $ whnf drainM (M.autoM Identity)
+      , bench "machines'" $ whnf drainM (M.autoM' Identity)
       , bench "pipes" $ whnf drainP (P.mapM Identity)
       , bench "conduit" $ whnf drainC (C.mapM Identity)
       ]
@@ -87,13 +97,16 @@ main =
       ]
   , bgroup "last"
       [ bench "machines" $ whnf drainM (M.final)
+      , bench "machines'" $ whnf drainM (M.final')
       , bench "pipes" $ whnf P.last sourceP
       ]
   , bgroup "buffered"
       [ bench "machines" $ whnf drainM (M.buffered 1000)
+      , bench "machines'" $ whnf drainM (M.buffered' 1000)
       ]
   , bgroup "concat"
       [ bench "machines" $ whnf drainM (M.mapping (replicate 10) M.~> M.asParts)
+      , bench "machines'" $ whnf drainM (M.mapping (replicate 10) M.~> M.asParts')
       , bench "pipes" $ whnf drainP (P.map (replicate 10) P.>-> P.concat)
       , bench "conduit" $ whnf drainC (C.map (replicate 10) C.$= C.concat)
       ]

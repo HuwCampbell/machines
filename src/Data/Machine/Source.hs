@@ -124,6 +124,13 @@ plug (MachineT m) = MachineT $ m >>= \x -> case x of
 
 -- | 'iterated' @f x@ returns an infinite source of repeated applications
 -- of @f@ to @x@
+--
+-- Examples:
+--
+-- >>> import Prelude
+-- >>> run $ taking 5 <~ iterated (*2) 1
+-- [1,2,4,8,16]
+--
 iterated :: (a -> a) -> a -> Source a
 iterated f x = construct (go x) where
   go a = do
